@@ -25,10 +25,15 @@ console.log( new CRC32( path.resolve( './test.png' ) ) );
 ```
 const filename = './path/to/file.png';
 const options  = {
-
+    chunkSize: CRC32.MB,
+    outputType: CRC32.HEX
 };
 
 const crc      = new CRC32( filename, options );
+
+crc.run()
+    .then( console.log )
+    .catch( console.error );
 ```
 
 `Returns`: `Array`

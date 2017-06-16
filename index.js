@@ -84,17 +84,29 @@ class CRC32
 
 		this.chunkSize  = opts.chunkSize  || CRC32.WHOLE;
 		this.outputType = opts.outputType || CRC32.HEX;
+		this.fname      = fname;
 
-        return this.open( fname, 'r' )
-            .then( fd => this.fstat( fd ).then( stat => ( { fd, stat } ) ) )
-			.then( d  => this.calc_crc( d.fd, d.stat.size ) )
-			.then( v  => {
-				v = this.toOutput( v, this.outputType );
-				this.result = v;
-				return v;
-            } )
-			.catch( console.error );
+		this.run();
 	}
+
+	// Alias for `calculate`
+	run()
+    {
+        return this.calculate();
+    }
+
+	calculate()
+    {
+        return this.open( this.fname, 'r' )
+            .then( fd => this.fstat( fd ).then( stat => ( { fd, stat } ) ) )
+            .then( d  => this.calc_crc( d.fd, d.stat.size ) )
+            .then( v  => {
+                v = this.toOutput( v, this.outputType );
+                this.result = v;
+                return v;
+            } )
+            .catch( console.error );
+    }
 
 	toOutput( n, o )
 	{

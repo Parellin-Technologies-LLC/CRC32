@@ -21,7 +21,7 @@ chai.use( chaiAsPromised );
 
 describe( 'crc32', () => {
     it( `should equal [ '213881d1' ]`, () => {
-        expect( test ).to.eventually.eql( [ '213881d1' ] )
+        expect( test.run() ).to.eventually.eql( [ '213881d1' ] )
             .then( r => console.log( `SUCCESS CRC32 of ${fpath} is equal to ${r[ 0 ].toString( 16 )}` ) )
             .catch( console.error );
     } );
