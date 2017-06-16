@@ -1,0 +1,6 @@
+{
+    "source": "./",
+    "destination": "./docs",
+    "unexportIdentifier": true,
+    "title": "p3-crc32"
+}
