@@ -1,6 +1,6 @@
 {
   "name": "faster-crc32",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A simple CRC32 module that implements the 32-bit cyclic redundancy check, or CRC-32, checksum. This module operates at top performance speed with no dependencies.",
   "main": "index.js",
   "directories": {
