@@ -1,18 +1,77 @@
 #!/usr/bin/env node
+'use strict';
 
-const CRC32 = require( './index.js' );
+const
+    { resolve, extname } = require( 'path' ),
+    CRC32                = require( './index.js' ),
+    acceptedEncoding     = [ 'BINARY', 'OCTAL', 'DECIMAL', 'HEX', 'INT' ],
+    acceptedChunkSize    = [ 'WHOLE', 'B', 'KB', 'MB', 'GB' ];
 
-/*****************************************************************************************************************
- *
- * COMMAND LINE INTERFACE, ONLY BASIC ERROR CHECKING
- *
- *****************************************************************************************************************/
+if( process.argv.includes( '-h' ) || process.argv.includes( '--help' ) ) {
+    console.log( '  ' );
+    console.log( '  CRC32' );
+    console.log( '  faster-crc32 - Perform a 32bit Cyclic Redundancy Check' );
+    console.log( '  ' );
+    console.log( '  Use:' );
+    console.log( '      crc32 [file_name] [encoding?] [chunk_size?]' );
+    console.log( '  ' );
+    console.log( '  Options:' );
+    console.log( '      -h, --help' );
+    console.log( '      -e, --encoding    format to output (BINARY, OCTAL, DECIMAL, HEX, INT)' );
+    console.log( '      -c, --chunk_size  chunk size of file to hash (WHOLE, B, KB, MB, GB)' );
+    console.log( '  ' );
+    console.log( '  Example:' );
+    console.log( '      crc32 ./README.md -c whole -e hex' );
+    console.log( '  ' );
+    process.exit( 0 );
+}
 
-if ( !process.argv[ 2 ] ) {
-    console.log( "Arugument Error - Please specify a file..." );
+if( !process.argv[ 2 ] || ( !extname( process.argv[ 2 ] ) && !( /(\/|^|.)\.[^\/\.]/g ).test( process.argv[ 2 ] ) ) ) {
+    console.log( 'Argument Error - Please specify a file...' );
     process.exit( 1 );
 }
 
-new CRC32( process.argv[ 2 ] )
-    .then( crcVals => console.log( `CRC - Unsigned decimal printed values:\n%j`, crcVals ) )
-    .catch( err => console.error( "ERROR: " + err, err ) );
+process.argv[ 2 ] = resolve( process.argv[ 2 ] );
+
+const opts = {};
+
+if( process.argv[ 3 ] ) {
+    const args = process.argv.splice( 3 );
+
+    args.forEach(
+        ( item, i ) => {
+            if( i + 1 >= args.length || i % 2 !== 0 ) {
+                return;
+            }
+
+            const
+                input       = args[ i + 1 ].toUpperCase(),
+                isEncoding  = item.match( /--encoding/i ) || item.match( /-e/i ),
+                isChunkSize = item.match( /--chunk_size/i ) || item.match( /-c/i );
+
+            if( isEncoding && !isChunkSize && acceptedEncoding.includes( input ) ) {
+                opts.outputType = CRC32[ input ];
+            } else if( isChunkSize && !isEncoding && acceptedChunkSize.includes( input ) ) {
+                opts.chunkSize = CRC32[ input ];
+            } else {
+                console.error(
+                    [
+                        `Unaccepted Output Type: ${ input } for option ${ isEncoding ? '--encoding' : '--chunk_size' }`,
+                        `  Accepted: ${ isEncoding ? 'BINARY, OCTAL, DECIMAL, HEX, INT' : 'WHOLE, B, KB, MB, GB' }`
+                    ].join( '\n' )
+                );
+
+                process.exit( 1 );
+            }
+        }
+    );
+}
+
+const buffer = require( 'fs' ).readFileSync( process.argv[ 2 ] );
+
+console.log( 'Expected: ["213881d1"]' );
+
+new CRC32( buffer, opts )
+// new CRC32( process.argv[ 2 ], opts )
+    .then( d => console.log( JSON.stringify( d ) ) )
+    .catch( err => console.error( 'ERROR: ' + err, err ) );

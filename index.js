@@ -1,19 +1,17 @@
 /** ****************************************************************************************************
  * File: index.js
- * @date 10/6/15
- * @version 1.0.0
- *
+ * Project: CRC32
+ * @author Nick Soggin <iSkore@users.noreply.github.com> on 10-Oct-2015
  *******************************************************************************************************/
-
 'use strict';
 
-const fs = require( 'fs' );
+const { read, open, fstat } = require( 'fs' );
 
 class CRC32
 {
-	constructor( fname, opts = {} )
-	{
-		this.TABLE = {
+    constructor( file, opts = {} )
+    {
+        this.TABLE = {
             '0': 0, '1': 1996959894, '2': -301047508, '3': -1727442502,
             '4': 124634137, '5': 1886057615, '6': -379345611, '7': -1637575261,
             '8': 249268274, '9': 2044508324, '10': -522852066, '11': -1747789432,
@@ -44,7 +42,7 @@ class CRC32
             '108': 1141124467, '109': 855842277, '110': -1442165665, '111': -586318647,
             '112': 1342533948, '113': 654459306, '114': -1106571248, '115': -921952122,
             '116': 1466479909, '117': 544179635, '118': -1184443383, '119': -832445281,
-            '120': 1591671054, '121': 702138776,'122': -1328506846, '123': -942167884,
+            '120': 1591671054, '121': 702138776, '122': -1328506846, '123': -942167884,
             '124': 1504918807, '125': 783551873, '126': -1212326853, '127': -1061524307,
             '128': -306674912, '129': -1698712650, '130': 62317068, '131': 1957810842,
             '132': -355121351, '133': -1647151185, '134': 81470997, '135': 1943803523,
@@ -80,114 +78,148 @@ class CRC32
             '252': -1274298825, '253': -1022587231, '254': 1510334235, '255': 755167117
         };
 
-		this.chunkSize  = opts.chunkSize  || CRC32.WHOLE;
-		this.outputType = opts.outputType || CRC32.HEX;
-		this.fname      = fname;
+        this.chunkSize  = opts.chunkSize || CRC32.WHOLE;
+        this.outputType = opts.outputType || CRC32.HEX;
+        this.isBuffer   = false;
 
-		this.run();
-	}
+        if( !file ) {
+            throw new Error( 'Argument Error - `file` is a required parameter' );
+        } else if( file === '' + file ) {
+            this.file = file;
+        } else if( Buffer.isBuffer( file ) ) {
+            this.isBuffer = true;
+            this.file     = file;
+        } else {
+            throw new TypeError( 'TypeError - `file` must be typeof string or buffer' );
+        }
 
-	// Alias for `calculate`
-	run()
+        return this.run();
+    }
+
+    // Alias for `calculate`
+    run()
     {
         return this.calculate();
     }
 
-	calculate()
+    calculate()
     {
-        return this.open( this.fname, 'r' )
-            .then( fd => this.fstat( fd ).then( stat => ( { fd, stat } ) ) )
-            .then( d  => this.calc_crc( d.fd, d.stat.size ) )
-            .then( v  => {
-                v = this.toOutput( v, this.outputType );
-                this.result = v;
-                return v;
+        let operation;
+        if( this.isBuffer ) {
+            operation = this.calc_crc( this.file, this.file.length );
+        } else {
+            operation = this.open( this.file, 'r' )
+                .then( fd => this.fstat( fd ).then( stat => ( { fd, stat } ) ) )
+                .then( d => this.calc_crc( d.fd, d.stat.size ) );
+        }
+
+        return operation
+            .then( v => {
+                this.result = this.toOutput( v, this.outputType );
+                return this.result;
             } )
             .catch( console.error );
     }
 
-	toOutput( n, o )
-	{
-		return n.map( i => o === CRC32.INT ? i : i.toString( o ) );
-	}
+    getResult()
+    {
+        return this.result;
+    }
+
+    toOutput( n, o )
+    {
+        return n.map( i => o === CRC32.INT ? i : i.toString( o ) );
+    }
 
     crc32( buf )
-	{
+    {
         const L = buf.length - 7;
 
         let crc = -1, i = 0, x = 0;
 
-        for ( ; x < 8; x++ )
+        for( ; x < 8; x++ ) {
             crc = ( crc >>> 8 ) ^ this.TABLE[ ( crc ^ buf[ i++ ] ) & 0xff ];
+        }
 
-        while( i < L + 7 )
+        while( i < L + 7 ) {
             crc = ( crc >>> 8 ) ^ this.TABLE[ ( crc ^ buf[ i++ ] ) & 0xFF ];
+        }
 
         return ~crc;
     }
 
     calc_crc( fd, bytesLeft )
-	{
-		this.chunkSize = this.chunkSize || bytesLeft;
+    {
+        this.chunkSize = this.chunkSize || bytesLeft;
 
         const
-			numBlocks = ~~( ( bytesLeft + this.chunkSize - 1 ) / this.chunkSize ),
+            numBlocks   = ~~( ( bytesLeft + this.chunkSize - 1 ) / this.chunkSize ),
             crcPromises = [];
 
-        let n = 0;
-
-        for ( ; n < numBlocks; n++ )
+        for( let n = 0; n < numBlocks; n++ ) {
             crcPromises.push( this.get_block( fd, this.chunkSize, n ) );
+        }
 
         return Promise.all( crcPromises );
     }
 
-    get_block( fd, size, index )
+    get_block( buffer, size, index )
     {
-        return new Promise( ( res, rej ) =>
-            this.read( fd, new Buffer( size ), 0, size, index * size )
-                .then( d => res( this.crc32( d.buffer.slice( 0, d.bytesRead ) ) >>> 0 ) )
-                .catch( e => rej( e ) )
+        return new Promise(
+            ( res, rej ) => {
+                let bufferChunk;
+
+                if( this.isBuffer ) {
+                    bufferChunk = Promise.resolve( { buffer, bytesRead: index * size } );
+                } else {
+                    bufferChunk = this.read( buffer, new Buffer( size ), 0, size, index * size );
+                }
+
+                bufferChunk
+                    .then( d => ( console.log( d ), d ) )
+                    .then( d => res( this.crc32( d.buffer.slice( 0, d.bytesRead ) ) >>> 0 ) )
+                    .catch( e => rej( e ) );
+            }
         );
     }
 
     read( fd, buf, off, len, pos )
-	{
+    {
         return new Promise(
-            ( res, rej ) => fs.read( fd, buf, off, len, pos,
+            ( res, rej ) => read( fd, buf, off, len, pos,
                 ( e, bytesRead, buffer ) => e ? rej( e ) : res( ( { bytesRead, buffer } ) )
             )
-        )
+        );
     }
 
     open( filename, option = 'r' )
-	{
-		return new Promise(
-			( res, rej ) => fs.open( filename, option,
+    {
+        return new Promise(
+            ( res, rej ) => open( filename, option,
                 ( e, fd ) => e ? rej( e ) : res( fd )
-			)
-		);
-	}
+            )
+        );
+    }
 
-	fstat( fd )
-	{
-		return new Promise(
-			( res, rej ) => fs.fstat( fd,
-				( e, d ) => e ? rej( e ) : res( d )
-			)
-		);
-	}
+    fstat( fd )
+    {
+        return new Promise(
+            ( res, rej ) => fstat( fd,
+                ( e, d ) => e ? rej( e ) : res( d )
+            )
+        );
+    }
 }
 
-CRC32.WHOLE    = 0;
-CRC32.B        = 1;
-CRC32.KB       = 1024;
-CRC32.MB       = 1048576;
-CRC32.GB       = 1073741824;
-CRC32.BINARY   = 2;
-CRC32.OCTAL    = 8;
-CRC32.DECIMAL  = 10;
-CRC32.HEX      = 16;
-CRC32.INT      = 32;
+CRC32.WHOLE   = 0;
+CRC32.B       = 1;
+CRC32.KB      = 1024;
+CRC32.MB      = 1048576;
+CRC32.GB      = 1073741824;
+CRC32.BINARY  = 2;
+CRC32.OCTAL   = 8;
+CRC32.DECIMAL = 10;
+CRC32.HEX     = 16;
+CRC32.INT     = 32;
 
 module.exports = CRC32;

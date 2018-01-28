@@ -5,7 +5,7 @@ A simple CRC32 module that implements the 32-bit cyclic redundancy check, or CRC
 
 #### Installation:
 
-`npm i CRC32`
+`npm i faster-crc32`
 
 
 Usage
@@ -14,15 +14,15 @@ Usage
 ```js
 
 const
-    CRC32 = require( 'crc32' ),
+    CRC32 = require( 'faster-crc32' ),
     path  = require( 'path' );
 
 console.log( new CRC32( path.resolve( './test.png' ) ) );
-
 ```
 
 `Construction`:
-```
+
+```js
 const filename = './path/to/file.png';
 const options  = {
     chunkSize: CRC32.MB,
@@ -31,7 +31,7 @@ const options  = {
 
 const crc      = new CRC32( filename, options );
 
-crc.run()
+crc
     .then( console.log )
     .catch( console.error );
 ```
