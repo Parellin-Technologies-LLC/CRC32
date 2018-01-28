@@ -2,6 +2,7 @@
 'use strict';
 
 const
+    { readFile }         = require( 'fs' ),
     { resolve, extname } = require( 'path' ),
     CRC32                = require( './index.js' ),
     acceptedEncoding     = [ 'BINARY', 'OCTAL', 'DECIMAL', 'HEX', 'INT' ],
@@ -40,14 +41,26 @@ if( process.argv[ 3 ] ) {
 
     args.forEach(
         ( item, i ) => {
-            if( i + 1 >= args.length || i % 2 !== 0 ) {
+            if( i % 2 !== 0 ) {
                 return;
             }
 
             const
-                input       = args[ i + 1 ].toUpperCase(),
                 isEncoding  = item.match( /--encoding/i ) || item.match( /-e/i ),
                 isChunkSize = item.match( /--chunk_size/i ) || item.match( /-c/i );
+
+            if( i + 1 >= args.length && ( isEncoding || isChunkSize ) ) {
+                console.error(
+                    [
+                        `Unaccepted Parameter: "undefined" for option ${ isEncoding ? '--encoding' : '--chunk_size' }`,
+                        `  Accepted: ${ isEncoding ? 'BINARY, OCTAL, DECIMAL, HEX, INT' : 'WHOLE, B, KB, MB, GB' }`
+                    ].join( '\n' )
+                );
+
+                process.exit( 1 );
+            }
+
+            const input = args[ i + 1 ].toUpperCase();
 
             if( isEncoding && !isChunkSize && acceptedEncoding.includes( input ) ) {
                 opts.outputType = CRC32[ input ];
@@ -56,7 +69,7 @@ if( process.argv[ 3 ] ) {
             } else {
                 console.error(
                     [
-                        `Unaccepted Output Type: ${ input } for option ${ isEncoding ? '--encoding' : '--chunk_size' }`,
+                        `Unaccepted Output Type: "${ input }" for option ${ isEncoding ? '--encoding' : '--chunk_size' }`,
                         `  Accepted: ${ isEncoding ? 'BINARY, OCTAL, DECIMAL, HEX, INT' : 'WHOLE, B, KB, MB, GB' }`
                     ].join( '\n' )
                 );
@@ -67,11 +80,17 @@ if( process.argv[ 3 ] ) {
     );
 }
 
-const buffer = require( 'fs' ).readFileSync( process.argv[ 2 ] );
+function read( fn ) {
+    return new Promise(
+        ( res, rej ) => {
+            readFile( fn,
+                ( e, d ) => e ? rej( e ) : res( d )
+            );
+        }
+    );
+}
 
-console.log( 'Expected: ["213881d1"]' );
-
-new CRC32( buffer, opts )
-// new CRC32( process.argv[ 2 ], opts )
+read( process.argv[ 2 ] )
+    .then( buffer => new CRC32( buffer, opts ) )
     .then( d => console.log( JSON.stringify( d ) ) )
-    .catch( err => console.error( 'ERROR: ' + err, err ) );
+    .catch( err => console.error( 'Error: ' + err, err ) );

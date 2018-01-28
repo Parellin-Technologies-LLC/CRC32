@@ -9,7 +9,6 @@ const
     CRC32          = require( '../index.js' ),
     path           = require( 'path' ),
     fpath          = './test/crcs.txt',
-    test           = new CRC32( path.resolve( fpath ) ),
     chai           = require( 'chai' ),
     chaiAsPromised = require( 'chai-as-promised' ),
     expect         = chai.expect;
@@ -17,7 +16,11 @@ const
 chai.use( chaiAsPromised );
 
 describe( 'crc32', () => {
-    it( `should equal [ '213881d1' ]`, () => {
-        expect( test ).to.eventually.eql( [ '213881d1' ] );
+    it( `CRC32 of test/crcs.txt should equal [ '213881d1' ]`, () => {
+        expect( new CRC32( path.resolve( fpath ) ) ).to.eventually.eql( [ '213881d1' ] );
+    } );
+
+    it( `<Buffer 61> should equal [ '79637f4c' ]`, () => {
+        expect( new CRC32( new Buffer( 'a' ) ) ).to.eventually.eql( [ '79637f4c' ] );
     } );
 } );

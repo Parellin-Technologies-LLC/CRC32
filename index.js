@@ -5,7 +5,7 @@
  *******************************************************************************************************/
 'use strict';
 
-const { read, open, fstat } = require( 'fs' );
+const { extname } = require( 'path' );
 
 class CRC32
 {
@@ -84,51 +84,49 @@ class CRC32
 
         if( !file ) {
             throw new Error( 'Argument Error - `file` is a required parameter' );
-        } else if( file === '' + file ) {
-            this.file = file;
+        } else if( file === '' + file && ( extname( file ) && ( /(\/|^|.)\.[^\/\.]/g ).test( file ) ) ) {
+            const { readFile } = require( 'fs' );
+            this.file          = new Promise( ( res, rej ) => readFile( file, ( e, buf ) => e ? rej( e ) : res( buf ) ) );
         } else if( Buffer.isBuffer( file ) ) {
             this.isBuffer = true;
             this.file     = file;
         } else {
-            throw new TypeError( 'TypeError - `file` must be typeof string or buffer' );
+            throw new TypeError( 'TypeError - `file` must be typeof String or Buffer' );
         }
 
-        return this.run();
-    }
-
-    // Alias for `calculate`
-    run()
-    {
-        return this.calculate();
-    }
-
-    calculate()
-    {
-        let operation;
-        if( this.isBuffer ) {
-            operation = this.calc_crc( this.file, this.file.length );
-        } else {
-            operation = this.open( this.file, 'r' )
-                .then( fd => this.fstat( fd ).then( stat => ( { fd, stat } ) ) )
-                .then( d => this.calc_crc( d.fd, d.stat.size ) );
-        }
-
-        return operation
-            .then( v => {
-                this.result = this.toOutput( v, this.outputType );
-                return this.result;
-            } )
+        return Promise.resolve( this.file )
+            .then( d => this.calc_crc( d ) )
             .catch( console.error );
     }
 
-    getResult()
+    calc_crc( buffer )
     {
-        return this.result;
+        this.chunkSize = this.chunkSize || buffer.length;
+
+        const
+            blockCount = ~~( ( buffer.length + this.chunkSize - 1 ) / this.chunkSize ),
+            blocks     = [];
+
+        for( let n = 0; n < blockCount; n++ ) {
+            blocks.push( this.get_block( buffer, this.chunkSize, n ) );
+        }
+
+        return Promise.all( blocks )
+            .then(
+                d => d.map(
+                    buf => {
+                        const crc = this.crc32( buf );
+                        return this.outputType === CRC32.INT ? crc : crc.toString( this.outputType );
+                    }
+                )
+            )
+            .catch( console.error );
     }
 
-    toOutput( n, o )
+    get_block( buffer, size, index )
     {
-        return n.map( i => o === CRC32.INT ? i : i.toString( o ) );
+        const chunk = ( index * size );
+        return Promise.resolve( buffer.slice( chunk, chunk + size ) );
     }
 
     crc32( buf )
@@ -138,76 +136,14 @@ class CRC32
         let crc = -1, i = 0, x = 0;
 
         for( ; x < 8; x++ ) {
-            crc = ( crc >>> 8 ) ^ this.TABLE[ ( crc ^ buf[ i++ ] ) & 0xff ];
+            crc = ( crc >>> 8 ) ^ this.TABLE[ ( crc ^ buf[ i++ ] ) & 0xFF ];
         }
 
         while( i < L + 7 ) {
             crc = ( crc >>> 8 ) ^ this.TABLE[ ( crc ^ buf[ i++ ] ) & 0xFF ];
         }
 
-        return ~crc;
-    }
-
-    calc_crc( fd, bytesLeft )
-    {
-        this.chunkSize = this.chunkSize || bytesLeft;
-
-        const
-            numBlocks   = ~~( ( bytesLeft + this.chunkSize - 1 ) / this.chunkSize ),
-            crcPromises = [];
-
-        for( let n = 0; n < numBlocks; n++ ) {
-            crcPromises.push( this.get_block( fd, this.chunkSize, n ) );
-        }
-
-        return Promise.all( crcPromises );
-    }
-
-    get_block( buffer, size, index )
-    {
-        return new Promise(
-            ( res, rej ) => {
-                let bufferChunk;
-
-                if( this.isBuffer ) {
-                    bufferChunk = Promise.resolve( { buffer, bytesRead: index * size } );
-                } else {
-                    bufferChunk = this.read( buffer, new Buffer( size ), 0, size, index * size );
-                }
-
-                bufferChunk
-                    .then( d => ( console.log( d ), d ) )
-                    .then( d => res( this.crc32( d.buffer.slice( 0, d.bytesRead ) ) >>> 0 ) )
-                    .catch( e => rej( e ) );
-            }
-        );
-    }
-
-    read( fd, buf, off, len, pos )
-    {
-        return new Promise(
-            ( res, rej ) => read( fd, buf, off, len, pos,
-                ( e, bytesRead, buffer ) => e ? rej( e ) : res( ( { bytesRead, buffer } ) )
-            )
-        );
-    }
-
-    open( filename, option = 'r' )
-    {
-        return new Promise(
-            ( res, rej ) => open( filename, option,
-                ( e, fd ) => e ? rej( e ) : res( fd )
-            )
-        );
-    }
-
-    fstat( fd )
-    {
-        return new Promise(
-            ( res, rej ) => fstat( fd,
-                ( e, d ) => e ? rej( e ) : res( d )
-            )
-        );
+        return ~crc >>> 0;
     }
 }
 
