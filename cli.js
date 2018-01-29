@@ -63,7 +63,7 @@ if( process.argv[ 3 ] ) {
             const input = args[ i + 1 ].toUpperCase();
 
             if( isEncoding && !isChunkSize && acceptedEncoding.includes( input ) ) {
-                opts.outputType = CRC32[ input ];
+                opts.encoding = CRC32[ input ];
             } else if( isChunkSize && !isEncoding && acceptedChunkSize.includes( input ) ) {
                 opts.chunkSize = CRC32[ input ];
             } else {
